@@ -66,9 +66,24 @@ static void MX_USART3_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/************ global variables *****************/
 char ch[50]="welcome !";
 char s[50];
 int sw=0;
+uint32_t actualReceivedBytes=0;
+uint8_t uart_buffer[30];
+uint8_t I2C_buffer[30];
+
+
+/****************** CAN variables ***********/
+CAN_TxHeaderTypeDef TxHeader;
+CAN_RxHeaderTypeDef RxHeader;
+uint8_t TxData[30] ;
+uint8_t RxData[8];
+uint32_t TxMailbox;
+CAN_FilterTypeDef sFilterConfig;
+
+
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 
 {
@@ -79,14 +94,14 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		  sw++;
 		  if(sw>3)sw=0;
 		  switch(sw){
+		  case 0:
+		 			  strcpy(ch, "I2C=>CAN");
+		 			  strcpy(s, "SDA:PB3-SCL:PB10");
+		 		  			  break;
 		  case 1:
 			  strcpy(ch, "UART=>CAN");
 			  strcpy(s, "RX:PC5-TX:PC10");
 			  break;
-		  case 0:
-			  strcpy(ch, "I2C=>CAN");
-			  strcpy(s, "SDA:PB3-SCL:PB10");
-		  			  break;
 		  case 2:
 			  strcpy(ch, "UART<=CAN");
 			  			  strcpy(s, "RX:PC5-TX:PC10");
@@ -99,6 +114,44 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		 // HAL_Delay(1);
 	}
 
+}
+void uart_to_can(){
+	actualReceivedBytes=HAL_UART_Receive(&huart3, uart_buffer, sizeof(uart_buffer),30);
+
+	if(actualReceivedBytes<8){
+		for(int i=0;i<actualReceivedBytes;i++)TxData[i]=uart_buffer[i];
+		HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox);
+		actualReceivedBytes=0;
+		return;
+	}
+		for(int i=0;i<actualReceivedBytes;i++){
+			TxData[i/8]=uart_buffer[i];
+			if(++i%8==0)HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox);
+
+	}
+		actualReceivedBytes=0;
+
+}
+void i2c_to_can(){
+	actualReceivedBytes=HAL_I2C_Slave_Receive(&hi2c2, I2C_buffer,sizeof(I2C_buffer),30);
+	if(actualReceivedBytes<8){
+		for(int i=0;i<actualReceivedBytes;i++)TxData[i]=I2C_buffer[i];
+		HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox);
+		actualReceivedBytes=0;
+		return;
+	}
+		for(int i=0;i<actualReceivedBytes;i++){
+			TxData[i/8]=I2C_buffer[i];
+			if(++i%8==0)HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox);
+
+	}
+		actualReceivedBytes=0;
+}
+void can_to_uart(){
+	 HAL_UART_Transmit(&huart2, RxData, sizeof(RxData), 10);
+}
+void can_to_I2C(){
+	HAL_I2C_Slave_Transmit (&hi2c2, RxData,sizeof(RxData),30);
 }
 /* USER CODE END 0 */
 
@@ -136,12 +189,43 @@ int main(void)
   MX_I2C2_Init();
   MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
+
+  /**************lcd home message********/
   lcd_init();
   // char ch[]="hello world";
   lcd_set_cursor(0,2);
   lcd_send_string(ch);
   HAL_Delay(2000);
   lcd_clear();
+
+  /********** CAN config ******/
+  // initialize filtering
+     sFilterConfig.FilterBank = 1;                       // value between 0 to 13 for JUST Master Mode (CAN1)
+     sFilterConfig.FilterMode = CAN_FILTERMODE_IDLIST;   // for filtering Identifiers
+     sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;  // for Scaling filtering (if use EXTENDED CAN this must be 32BIT)
+     sFilterConfig.FilterIdHigh = (0x541) << 5;          // First Identifier MSB value for receiving in IDLIST Mode for 32BIT Scaling
+     sFilterConfig.FilterIdLow = 0x00;                   // First Identifier LSB value for receiving in IDLIST Mode for 32BIT Scaling
+     sFilterConfig.FilterMaskIdHigh = 0x00;              // Second Identifier MSB value for receiving in IDLIST Mode for 32BIT Scaling
+     sFilterConfig.FilterMaskIdLow = 0x00;               // Second Identifier LSB value for receiving in IDLIST Mode for 32BIT Scaling
+     sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;  // specify FIFO0 or FIFO1
+     sFilterConfig.FilterActivation = CAN_FILTER_ENABLE; // Enable filtering
+     // sFilterConfig.SlaveStartFilterBank = 14;            // DOES NOT MATTER FOR JUST MASTER MODE (CAN1)
+
+
+     // Transmitting header parameters.
+      TxHeader.StdId = 0x123;      // Identifier to sent In Standard Frame
+      // TxHeader.ExtId = 0x123;      // Identifier to sent In Extended Frame
+      TxHeader.RTR = CAN_RTR_DATA; // Specify the first type of Frame : DATA, REMOTE - DATA Chosen
+      TxHeader.IDE = CAN_ID_STD;   // Specify the second type of Frame : Standard, Extended - Standard Chosen
+      // TxHeader.IDE = CAN_ID_STD; // Specify the second type of Frame : Standard, Extended - Extended Chosen
+      TxHeader.DLC = 8;          // Specify the number of Data (in Bytes), Between 0 to 8
+      TxHeader.TransmitGlobalTime = DISABLE;
+
+      // Applying configurations and Start CAN
+      HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig);
+      HAL_CAN_Start(&hcan1);
+      HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING); // this function works like this :	HAL_CAN_Receive_IT(&hcan1, CAN_FIFO0) ;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -157,6 +241,7 @@ int main(void)
 	  lcd_send_string(s);
 	  HAL_Delay(200);
 	  lcd_clear();
+
 
 
   }
@@ -265,7 +350,7 @@ static void MX_I2C1_Init(void)
   hi2c1.Instance = I2C1;
   hi2c1.Init.ClockSpeed = 100000;
   hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
-  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.OwnAddress1 = 11;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
   hi2c1.Init.OwnAddress2 = 0;
@@ -432,7 +517,11 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+	HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData); //Receive CAN bus message to canRX buffer
 
+}
 /* USER CODE END 4 */
 
 /**

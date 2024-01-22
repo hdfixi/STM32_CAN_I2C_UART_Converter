@@ -12,5 +12,10 @@ This project involves the development of a versatile bidirectional converter tha
 - **LCD Display:** Includes an LCD display for visualizing information and selecting conversion modes.
 - **Mode Selection Button:** Utilizes a button for easy and intuitive selection of the desired conversion mode.
 - **Open-Source:** The project is open-source, allowing for community collaboration and further enhancements.
+## Some images
+# The hardware setup
+![Project Image](project.jpg)
+# CAN tranciever testing
+![Project Image](can.jpg)
 
 This bidirectional converter is designed to serve as a valuable tool for developers working in environments where CAN, I2C, and UART devices coexist, providing a bridge for seamless communication and data transfer.

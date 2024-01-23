@@ -90,12 +90,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	if (GPIO_Pin ==butt_Pin )
 
 	{
-		  HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin); // for detect data receive
+		  HAL_GPIO_TogglePin(led_GPIO_Port, led_Pin);
 		  sw++;
 		  if(sw>3)sw=0;
 		  switch(sw){
 		  case 0:
-		 			  strcpy(ch, "I2C=>CAN");
+		 			  strcpy(ch, "I2C=>CAN add=11");
 		 			  strcpy(s, "SDA:PB3-SCL:PB10");
 		 		  			  break;
 		  case 1:
@@ -107,7 +107,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 			  			  strcpy(s, "RX:PC5-TX:PC10");
 			  			  break;
 		  case 3:
-		  			  strcpy(ch, "I2C<=CAN");
+		  			  strcpy(ch, "I2C<=CAN add=11");
 		  			  strcpy(s, "SDA:PB3-SCL:PB10");
 		  		  			  break;
 		  }
@@ -148,7 +148,7 @@ void i2c_to_can(){
 		actualReceivedBytes=0;
 }
 void can_to_uart(){
-	 HAL_UART_Transmit(&huart2, RxData, sizeof(RxData), 10);
+	 HAL_UART_Transmit(&huart3, RxData, sizeof(RxData), 10);
 }
 void can_to_I2C(){
 	HAL_I2C_Slave_Transmit (&hi2c2, RxData,sizeof(RxData),30);
@@ -239,10 +239,22 @@ int main(void)
 	  lcd_send_string(ch);
 	  lcd_set_cursor(1,0);
 	  lcd_send_string(s);
-	  HAL_Delay(200);
+
+	  switch(sw){
+	  case 0:
+		  i2c_to_can();
+		  break;
+	  case 1:
+		  uart_to_can();
+		  break;
+	  case 2:
+		  can_to_uart();
+		  break;
+	  case 3:
+		  can_to_I2C();
+		  break;
+	  }
 	  lcd_clear();
-
-
 
   }
   /* USER CODE END 3 */
@@ -350,7 +362,7 @@ static void MX_I2C1_Init(void)
   hi2c1.Instance = I2C1;
   hi2c1.Init.ClockSpeed = 100000;
   hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
-  hi2c1.Init.OwnAddress1 = 11;
+  hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
   hi2c1.Init.OwnAddress2 = 0;
@@ -384,7 +396,7 @@ static void MX_I2C2_Init(void)
   hi2c2.Instance = I2C2;
   hi2c2.Init.ClockSpeed = 100000;
   hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
-  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.OwnAddress1 = 11;
   hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
   hi2c2.Init.OwnAddress2 = 0;
